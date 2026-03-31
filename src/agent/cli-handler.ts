@@ -22,8 +22,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   if (!process.env.OPENCLI_API_KEY) {
     throw new ConfigError(
       'OPENCLI_API_KEY is not set',
-      'export OPENCLI_API_KEY=sk-ant-...          # Anthropic or OpenAI key\n'
-      + 'export OPENCLI_MODEL=openai:gpt-5.4        # Optional: specify provider + model',
+      'export OPENCLI_PROVIDER=anthropic           # or openai\n'
+      + 'export OPENCLI_MODEL=sonnet                 # model alias or full ID\n'
+      + 'export OPENCLI_API_KEY=sk-ant-...           # your API key',
     );
   }
 

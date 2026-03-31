@@ -61,13 +61,19 @@ The `--save-as` flag analyzes the agent's actions and captured network requests,
 
 ### Required
 
-Set your Anthropic API key (or use a compatible proxy):
-
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+# Provider: anthropic (default) or openai
+export OPENCLI_PROVIDER=anthropic
 
-# Optional: use a third-party API proxy
-export ANTHROPIC_BASE_URL=https://your-proxy.com/api/anthropic
+# Model: alias or full model ID
+export OPENCLI_MODEL=sonnet          # aliases: sonnet, opus, haiku (anthropic)
+                                     #          gpt-5.4, gpt-4.1, o3 (openai)
+
+# API key for your provider
+export OPENCLI_API_KEY=sk-ant-...
+
+# Optional: API proxy
+export OPENCLI_BASE_URL=https://your-proxy.com/api/anthropic
 ```
 
 ### Chrome Extension

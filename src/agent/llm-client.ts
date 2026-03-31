@@ -2,18 +2,10 @@
  * LLM Client — multi-provider wrapper supporting Anthropic and OpenAI APIs.
  *
  * Configuration via environment variables:
- *   OPENCLI_MODEL=anthropic:sonnet     (or openai:gpt-5.4, anthropic:opus, etc.)
+ *   OPENCLI_PROVIDER=anthropic          (or openai)
+ *   OPENCLI_MODEL=sonnet                (alias or full model ID)
  *   OPENCLI_API_KEY=sk-...
- *   OPENCLI_BASE_URL=https://...       (optional, for proxies)
- *
- * Fallback to legacy env vars:
- *   ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL
- *
- * Features:
- * - Anthropic: prompt caching, multimodal (text + image)
- * - OpenAI: multimodal (text + image), structured output
- * - Token tracking with cost estimation
- * - JSON extraction and Zod validation
+ *   OPENCLI_BASE_URL=https://...        (optional, for proxies)
  */
 
 import { AgentResponse } from './types.js';
@@ -23,7 +15,7 @@ import { AgentResponse } from './types.js';
 export type Provider = 'anthropic' | 'openai';
 
 export interface LLMClientConfig {
-  /** Model string: "anthropic:sonnet", "openai:gpt-5.4", or raw model name */
+  provider?: Provider;
   model?: string;
   apiKey?: string;
   baseURL?: string;
@@ -43,50 +35,26 @@ interface TokenUsage {
   estimatedCost: number;
 }
 
-// ── Model Resolution ──────────────────────────────────────────────
+// ── Model Aliases ─────────────────────────────────────────────────
 
-interface ResolvedModel {
-  provider: Provider;
-  modelId: string;
-}
-
-const MODEL_ALIASES: Record<string, ResolvedModel> = {
-  // Anthropic aliases
-  'anthropic:sonnet': { provider: 'anthropic', modelId: 'claude-sonnet-4-20250514' },
-  'anthropic:opus': { provider: 'anthropic', modelId: 'claude-opus-4-20250514' },
-  'anthropic:haiku': { provider: 'anthropic', modelId: 'claude-haiku-4-20250514' },
-  // OpenAI aliases
-  'openai:gpt-5.4': { provider: 'openai', modelId: 'gpt-5.4' },
-  'openai:gpt-4.1': { provider: 'openai', modelId: 'gpt-4.1' },
-  'openai:gpt-4o': { provider: 'openai', modelId: 'gpt-4o' },
-  'openai:o3': { provider: 'openai', modelId: 'o3' },
+const ANTHROPIC_ALIASES: Record<string, string> = {
+  'sonnet': 'claude-sonnet-4-20250514',
+  'opus': 'claude-opus-4-20250514',
+  'haiku': 'claude-haiku-4-20250514',
 };
 
-function resolveModel(input: string): ResolvedModel {
-  // Check aliases first
-  const lower = input.toLowerCase();
-  if (MODEL_ALIASES[lower]) return MODEL_ALIASES[lower];
+const OPENAI_ALIASES: Record<string, string> = {
+  'gpt-5.4': 'gpt-5.4',
+  'gpt-4.1': 'gpt-4.1',
+  'gpt-4o': 'gpt-4o',
+  'o3': 'o3',
+  'o4-mini': 'o4-mini',
+};
 
-  // Check provider:model format
-  if (input.includes(':')) {
-    const [providerStr, ...modelParts] = input.split(':');
-    const modelId = modelParts.join(':');
-    const provider = providerStr.toLowerCase() as Provider;
-    if (provider === 'anthropic' || provider === 'openai') {
-      return { provider, modelId };
-    }
-  }
-
-  // Guess provider from model name
-  if (input.startsWith('claude') || input.startsWith('claude-')) {
-    return { provider: 'anthropic', modelId: input };
-  }
-  if (input.startsWith('gpt') || input.startsWith('o1') || input.startsWith('o3') || input.startsWith('o4')) {
-    return { provider: 'openai', modelId: input };
-  }
-
-  // Default to anthropic
-  return { provider: 'anthropic', modelId: input };
+function resolveModelId(alias: string, provider: Provider): string {
+  const lower = alias.toLowerCase();
+  const table = provider === 'anthropic' ? ANTHROPIC_ALIASES : OPENAI_ALIASES;
+  return table[lower] ?? alias;
 }
 
 // ── Cost Constants ────────────────────────────────────────────────
@@ -106,22 +74,28 @@ export class LLMClient {
   private _totalTokens: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, estimatedCost: 0 };
 
   constructor(config: LLMClientConfig = {}) {
-    // Resolve model
-    const modelStr = config.model ?? process.env.OPENCLI_MODEL ?? 'anthropic:sonnet';
-    const resolved = resolveModel(modelStr);
-    this.provider = resolved.provider;
-    this.modelId = resolved.modelId;
+    // Resolve provider (default: anthropic)
+    this.provider = config.provider
+      ?? (process.env.OPENCLI_PROVIDER as Provider | undefined)
+      ?? 'anthropic';
+    if (this.provider !== 'anthropic' && this.provider !== 'openai') {
+      throw new Error(`Unsupported provider: ${this.provider}. Use 'anthropic' or 'openai'.`);
+    }
+
+    // Resolve model (default: sonnet for anthropic, gpt-4o for openai)
+    const modelAlias = config.model ?? process.env.OPENCLI_MODEL ?? (this.provider === 'anthropic' ? 'sonnet' : 'gpt-4o');
+    this.modelId = resolveModelId(modelAlias, this.provider);
 
     // Resolve API key
     this.apiKey = config.apiKey ?? process.env.OPENCLI_API_KEY ?? '';
     if (!this.apiKey) {
       throw new Error(
         'OPENCLI_API_KEY is not set.\n'
-        + 'Set it with:\n'
-        + '  export OPENCLI_API_KEY=sk-ant-...          # Anthropic key\n'
-        + '  export OPENCLI_API_KEY=sk-...              # OpenAI key\n'
-        + '  export OPENCLI_MODEL=openai:gpt-5.4        # Optional: specify provider + model\n'
-        + '  export OPENCLI_BASE_URL=https://proxy.com   # Optional: API proxy',
+        + 'Configure with:\n'
+        + '  export OPENCLI_PROVIDER=anthropic     # or openai\n'
+        + '  export OPENCLI_MODEL=sonnet            # alias or full model ID\n'
+        + '  export OPENCLI_API_KEY=sk-ant-...      # your API key\n'
+        + '  export OPENCLI_BASE_URL=https://...    # optional proxy',
       );
     }
 
@@ -129,14 +103,9 @@ export class LLMClient {
     this.baseURL = config.baseURL ?? process.env.OPENCLI_BASE_URL ?? undefined;
   }
 
-  /** The resolved provider name */
   getProvider(): Provider { return this.provider; }
-
-  /** The resolved model ID */
   getModelId(): string { return this.modelId; }
-
-  /** Human-readable model display string */
-  getModelDisplay(): string { return `${this.provider}:${this.modelId}`; }
+  getModelDisplay(): string { return `${this.provider}/${this.modelId}`; }
 
   // ── Chat (with AgentResponse validation) ────────────────────────
 
@@ -235,7 +204,7 @@ export class LLMClient {
   }
 
   private _trackAnthropicUsage(usage: unknown): void {
-    const u = usage as Record<string, number> | undefined;
+    const u = usage as unknown as Record<string, number> | undefined;
     const costs = COST_TABLES.anthropic;
     const input = u?.input_tokens ?? 0;
     const output = u?.output_tokens ?? 0;
