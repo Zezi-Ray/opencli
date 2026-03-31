@@ -9,6 +9,7 @@
 export OPENCLI_PROVIDER=anthropic       # or openai
 export OPENCLI_MODEL=sonnet             # alias or full model ID
 export OPENCLI_API_KEY=sk-ant-...       # your API key
+export OPENCLI_BASE_URL=https://...     # optional: API proxy (add /v1 for OpenAI proxies)
 
 # 2. Run
 opencli operate "go to Hacker News and extract the top 5 stories"

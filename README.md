@@ -92,6 +92,7 @@ Let an AI agent operate your browser with natural language. Supports Anthropic a
 export OPENCLI_PROVIDER=anthropic       # or openai
 export OPENCLI_MODEL=sonnet             # model alias
 export OPENCLI_API_KEY=sk-ant-...       # your API key
+export OPENCLI_BASE_URL=https://...     # optional: API proxy
 
 # Run
 opencli operate "go to Hacker News and extract the top 5 stories"
