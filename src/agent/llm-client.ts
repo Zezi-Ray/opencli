@@ -198,6 +198,16 @@ export class LLMClient {
 
     const textBlock = response.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text' || !textBlock.text.trim()) {
+      // Check for HTML response from misconfigured proxy
+      const responseStr = JSON.stringify(response);
+      if (responseStr.includes('<!doctype') || responseStr.includes('<html')) {
+        const base = this.baseURL ?? 'unknown';
+        throw new Error(
+          `LLM returned HTML instead of JSON — your OPENCLI_BASE_URL may be incorrect.\n`
+          + `Current: ${base}\n`
+          + `Try: export OPENCLI_BASE_URL='${base.replace(/\/+$/, '')}/v1'`,
+        );
+      }
       throw new Error('LLM returned empty response');
     }
     return textBlock.text;
@@ -256,10 +266,31 @@ export class LLMClient {
       messages: apiMessages as any,
     }, signal ? { signal } : undefined);
 
+    // Detect HTML response (proxy returned dashboard page instead of API response)
+    const raw = response as unknown;
+    if (typeof raw === 'string' && (raw as string).trimStart().startsWith('<!')) {
+      const base = this.baseURL ?? 'unknown';
+      throw new Error(
+        `LLM returned HTML instead of JSON — your OPENCLI_BASE_URL may be incorrect.\n`
+        + `Current: ${base}\n`
+        + `Try adding /v1: export OPENCLI_BASE_URL='${base.replace(/\/+$/, '')}/v1'`,
+      );
+    }
+
     this._trackOpenAIUsage(response.usage);
 
     const text = response.choices?.[0]?.message?.content;
     if (!text?.trim()) {
+      // Check if the response object itself looks like HTML (proxy misconfiguration)
+      const responseStr = JSON.stringify(response);
+      if (responseStr.includes('<!doctype') || responseStr.includes('<html')) {
+        const base = this.baseURL ?? 'unknown';
+        throw new Error(
+          `LLM returned HTML instead of JSON — your OPENCLI_BASE_URL may be incorrect.\n`
+          + `Current: ${base}\n`
+          + `Try adding /v1: export OPENCLI_BASE_URL='${base.replace(/\/+$/, '')}/v1'`,
+        );
+      }
       throw new Error('LLM returned empty response');
     }
     return text;
