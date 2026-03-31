@@ -26,12 +26,21 @@ export type ConnectivityResult = {
   durationMs: number;
 };
 
+export type LLMStatus = {
+  configured: boolean;
+  provider?: string;
+  model?: string;
+  connected?: boolean;
+  error?: string;
+};
+
 export type DoctorReport = {
   cliVersion?: string;
   daemonRunning: boolean;
   extensionConnected: boolean;
   extensionVersion?: string;
   connectivity?: ConnectivityResult;
+  llm?: LLMStatus;
   sessions?: Array<{ workspace: string; windowId: number; tabCount: number; idleMsRemaining: number }>;
   issues: string[];
 };
@@ -78,6 +87,30 @@ export async function runBrowserDoctor(opts: DoctorOptions = {}): Promise<Doctor
     ? await listSessions() as Array<{ workspace: string; windowId: number; tabCount: number; idleMsRemaining: number }>
     : undefined;
 
+  // LLM configuration check
+  let llm: LLMStatus = { configured: false };
+  try {
+    const { LLMClient } = await import('./agent/llm-client.js');
+    const client = new LLMClient();
+    llm = {
+      configured: true,
+      provider: client.getProvider(),
+      model: client.getModelId(),
+    };
+    // Quick connectivity test: send a minimal request
+    if (opts.live) {
+      try {
+        const response = await client.generateRaw('Reply with exactly: ok', 'test');
+        llm.connected = response.trim().toLowerCase().includes('ok');
+      } catch (err) {
+        llm.connected = false;
+        llm.error = getErrorMessage(err);
+      }
+    }
+  } catch (err) {
+    llm = { configured: false, error: getErrorMessage(err) };
+  }
+
   const issues: string[] = [];
   if (!status.running) {
     issues.push('Daemon is not running. It should start automatically when you run an opencli browser command.');
@@ -93,6 +126,16 @@ export async function runBrowserDoctor(opts: DoctorOptions = {}): Promise<Doctor
   }
   if (connectivity && !connectivity.ok) {
     issues.push(`Browser connectivity test failed: ${connectivity.error ?? 'unknown'}`);
+  }
+  if (!llm.configured) {
+    issues.push(
+      'LLM not configured for opencli operate.\n' +
+      '  Set OPENCLI_API_KEY and optionally OPENCLI_MODEL:\n' +
+      '    export OPENCLI_API_KEY=sk-ant-...          # Anthropic\n' +
+      '    export OPENCLI_MODEL=openai:gpt-5.4        # OpenAI',
+    );
+  } else if (llm.connected === false) {
+    issues.push(`LLM connectivity test failed: ${llm.error ?? 'unknown'}`);
   }
 
   if (status.extensionVersion && opts.cliVersion) {
@@ -112,6 +155,7 @@ export async function runBrowserDoctor(opts: DoctorOptions = {}): Promise<Doctor
     extensionConnected: status.extensionConnected,
     extensionVersion: status.extensionVersion,
     connectivity,
+    llm,
     sessions,
     issues,
   };
@@ -138,6 +182,22 @@ export function renderBrowserDoctorReport(report: DoctorReport): string {
     lines.push(`${connIcon} Connectivity: ${detail}`);
   } else {
     lines.push(`${chalk.dim('[SKIP]')} Connectivity: skipped (--no-live)`);
+  }
+
+  // LLM status
+  if (report.llm) {
+    if (report.llm.configured) {
+      const modelStr = `${report.llm.provider}:${report.llm.model}`;
+      if (report.llm.connected === true) {
+        lines.push(`${chalk.green('[OK]')} LLM: ${modelStr} ${chalk.dim('(connected)')}`);
+      } else if (report.llm.connected === false) {
+        lines.push(`${chalk.red('[FAIL]')} LLM: ${modelStr} ${chalk.dim(`(${report.llm.error ?? 'connection failed'})`)}`);
+      } else {
+        lines.push(`${chalk.green('[OK]')} LLM: ${modelStr} ${chalk.dim('(connectivity not tested, use --live)')}`);
+      }
+    } else {
+      lines.push(`${chalk.yellow('[MISSING]')} LLM: not configured ${chalk.dim('(set OPENCLI_API_KEY for opencli operate)')}`);
+    }
   }
 
   if (report.sessions) {

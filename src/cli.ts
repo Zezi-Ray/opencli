@@ -237,25 +237,26 @@ export function runCli(BUILTIN_CLIS: string, USER_CLIS: string): void {
     .argument('<task>', 'Natural language task description')
     .option('--url <url>', 'Starting URL (agent navigates if omitted)')
     .option('--max-steps <n>', 'Maximum agent steps', '50')
-    .option('--model <model>', 'LLM model', 'claude-sonnet-4-20250514')
     .option('--screenshot', 'Include screenshots in LLM context', false)
     .option('--record', 'Record action trace', false)
     .option('--save-as <site/name>', 'Save as reusable CLI skill after completion')
     .option('-v, --verbose', 'Show step-by-step reasoning', false)
     .action(async (task, opts) => {
       const { runAgent, renderAgentResult } = await import('./agent/cli-handler.js');
+      const { LLMClient } = await import('./agent/llm-client.js');
+      const llm = new LLMClient();
+      const modelDisplay = llm.getModelDisplay();
       const result = await runAgent({
         task,
         startUrl: opts.url,
         maxSteps: parseInt(opts.maxSteps, 10),
-        model: opts.model,
         useScreenshot: opts.screenshot,
         record: opts.record,
         saveAs: opts.saveAs,
         verbose: opts.verbose,
         BrowserFactory: getBrowserFactory(),
       });
-      console.log(renderAgentResult(result));
+      console.log(renderAgentResult(result, modelDisplay));
       process.exitCode = result.success ? EXIT_CODES.SUCCESS : EXIT_CODES.GENERIC_ERROR;
     });
 

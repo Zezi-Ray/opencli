@@ -9,6 +9,7 @@ import chalk from 'chalk';
 import { browserSession } from '../runtime.js';
 import { ConfigError } from '../errors.js';
 import { AgentLoop } from './agent-loop.js';
+import { LLMClient } from './llm-client.js';
 import { saveTraceAsSkillWithValidation } from './skill-saver.js';
 import type { AgentConfig, AgentResult } from './types.js';
 
@@ -17,12 +18,24 @@ export interface RunAgentOptions extends AgentConfig {
 }
 
 export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
-  // Validate API key
-  if (!process.env.ANTHROPIC_API_KEY) {
+  // Validate API key (check all possible env var sources)
+  const hasKey = process.env.OPENCLI_API_KEY
+    || process.env.ANTHROPIC_API_KEY
+    || process.env.OPENAI_API_KEY;
+  if (!hasKey) {
     throw new ConfigError(
-      'ANTHROPIC_API_KEY environment variable is required for opencli operate',
-      'Set it with: export ANTHROPIC_API_KEY=sk-ant-...',
+      'No API key configured for opencli operate',
+      'Set one of:\n'
+      + '  export OPENCLI_API_KEY=sk-...           # Anthropic or OpenAI key\n'
+      + '  export OPENCLI_MODEL=openai:gpt-5.4     # Specify provider\n'
+      + '  export ANTHROPIC_API_KEY=sk-ant-...      # Legacy Anthropic key',
     );
+  }
+
+  // Show model info
+  const llmPreview = new LLMClient({ model: opts.model });
+  if (opts.verbose) {
+    console.log(chalk.dim(`Model: ${llmPreview.getModelDisplay()}`));
   }
 
   const workspace = opts.workspace ?? `operate:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -35,8 +48,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
 
     const agentResult = await agent.run();
 
-    // Save as skill if requested and successful (must happen inside browserSession
-    // so the page is still available for validation)
+    // Save as skill if requested and successful
     if (opts.saveAs && agentResult.success && agentResult.trace) {
       try {
         const saved = await saveTraceAsSkillWithValidation(agentResult.trace, opts.saveAs, agent.getLLMClient());
@@ -55,10 +67,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   return result;
 }
 
-export function renderAgentResult(result: AgentResult): string {
+export function renderAgentResult(result: AgentResult, modelDisplay?: string): string {
   const lines: string[] = [];
 
-  // Status line
   if (result.success) {
     lines.push(chalk.green('✓ Task completed successfully'));
   } else if (result.status === 'max_steps') {
@@ -67,13 +78,11 @@ export function renderAgentResult(result: AgentResult): string {
     lines.push(chalk.red('✗ Task failed'));
   }
 
-  // Result
   if (result.result) {
     lines.push('');
     lines.push(result.result);
   }
 
-  // Extracted data
   if (result.extractedData !== undefined) {
     lines.push('');
     lines.push(chalk.dim('Extracted data:'));
@@ -82,13 +91,15 @@ export function renderAgentResult(result: AgentResult): string {
       : JSON.stringify(result.extractedData, null, 2));
   }
 
-  // Stats
+  // Stats line with model name
   lines.push('');
-  lines.push(chalk.dim([
+  const stats = [
     `Steps: ${result.stepsCompleted}`,
     `Tokens: ${result.tokenUsage.input}in/${result.tokenUsage.output}out`,
     `Cost: ~$${result.tokenUsage.estimatedCost.toFixed(4)}`,
-  ].join(' | ')));
+  ];
+  if (modelDisplay) stats.push(`Model: ${modelDisplay}`);
+  lines.push(chalk.dim(stats.join(' | ')));
 
   return lines.join('\n');
 }
