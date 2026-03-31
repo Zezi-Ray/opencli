@@ -264,13 +264,13 @@ node -e "
 cd ~/code/opencli/.claude/worktrees/open-operator && npm run build
 
 # 基础 agent 测试
-ANTHROPIC_API_KEY=... node dist/main.js operate "go to example.com and tell me the page title" -v
+OPENCLI_API_KEY=... node dist/main.js operate "go to example.com and tell me the page title" -v
 ```
 
 ### Phase 4-5 验证
 ```bash
 # 完整流程测试：operate → save → replay
-ANTHROPIC_API_KEY=... node dist/main.js operate \
+OPENCLI_API_KEY=... node dist/main.js operate \
   --save-as test/example \
   --url https://example.com \
   "find the main heading text" -v

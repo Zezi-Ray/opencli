@@ -143,7 +143,6 @@ function runTask(task: TaskDef): TaskResult {
     'node', 'dist/main.js', 'operate',
     ...(task.url ? ['--url', task.url] : []),
     '--max-steps', String(maxSteps),
-    '--model', process.env.AUTORESEARCH_MODEL ?? 'claude-sonnet-4-20250514',
     JSON.stringify(task.command),
   ];
 
