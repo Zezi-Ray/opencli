@@ -5,16 +5,14 @@
 ## Quick Start
 
 ```bash
-# Prerequisites: Chrome + OpenCLI extension installed, ANTHROPIC_API_KEY set
-export ANTHROPIC_API_KEY=sk-ant-...
+# 1. Configure LLM provider
+export OPENCLI_PROVIDER=anthropic       # or openai
+export OPENCLI_MODEL=sonnet             # alias or full model ID
+export OPENCLI_API_KEY=sk-ant-...       # your API key
 
-# Basic usage
+# 2. Run
 opencli operate "go to Hacker News and extract the top 5 stories"
-
-# With a starting URL
 opencli operate --url https://github.com/trending "extract the top 3 trending repos"
-
-# Watch the agent work (verbose mode)
 opencli operate -v "search for flights from NYC to LA on Google Flights"
 ```
 
@@ -37,15 +35,47 @@ The agent uses your existing Chrome browser session through the OpenCLI extensio
 |--------|---------|-------------|
 | `--url <url>` | — | Starting URL (agent navigates if omitted) |
 | `--max-steps <n>` | 50 | Maximum agent steps before timeout |
-| `--model <model>` | claude-sonnet-4-20250514 | LLM model to use |
 | `--screenshot` | false | Include screenshots in LLM context (more accurate but more expensive) |
 | `--record` | false | Record action trace for debugging |
 | `--save-as <site/name>` | — | Save successful operation as reusable CLI skill |
 | `-v, --verbose` | false | Show step-by-step reasoning |
 
+## Configuration
+
+### Environment Variables
+
+```bash
+# Required
+export OPENCLI_PROVIDER=anthropic       # Provider: anthropic or openai
+export OPENCLI_API_KEY=sk-ant-...       # API key for your provider
+
+# Optional
+export OPENCLI_MODEL=sonnet             # Model alias or full ID (default: sonnet)
+export OPENCLI_BASE_URL=https://...     # API proxy URL (must include /v1 for OpenAI proxies)
+```
+
+### Model Aliases
+
+| Provider | Aliases | Default |
+|----------|---------|---------|
+| anthropic | `sonnet`, `opus`, `haiku` | sonnet |
+| openai | `gpt-5.4`, `gpt-4.1`, `gpt-4o`, `o3`, `o4-mini` | gpt-4o |
+
+You can also use full model IDs (e.g., `claude-sonnet-4-20250514`, `gpt-5.4`).
+
+### Verify Configuration
+
+```bash
+opencli doctor    # Shows LLM provider, model, and connectivity status
+```
+
+### Chrome Extension
+
+The OpenCLI browser extension must be installed and connected. Run `opencli doctor` to check.
+
 ## Save as Skill
 
-After a successful operation, you can save it as a reusable CLI command that runs **without AI**:
+After a successful operation, save it as a reusable CLI command that runs **without AI**:
 
 ```bash
 # First run: AI agent completes the task
@@ -56,29 +86,6 @@ opencli hn top
 ```
 
 The `--save-as` flag analyzes the agent's actions and captured network requests, then uses the LLM to generate an optimized TypeScript adapter. If the agent discovered an API during execution, the generated skill will call the API directly instead of replaying UI actions.
-
-## Configuration
-
-### Required
-
-```bash
-# Provider: anthropic (default) or openai
-export OPENCLI_PROVIDER=anthropic
-
-# Model: alias or full model ID
-export OPENCLI_MODEL=sonnet          # aliases: sonnet, opus, haiku (anthropic)
-                                     #          gpt-5.4, gpt-4.1, o3 (openai)
-
-# API key for your provider
-export OPENCLI_API_KEY=sk-ant-...
-
-# Optional: API proxy
-export OPENCLI_BASE_URL=https://your-proxy.com/api/anthropic
-```
-
-### Chrome Extension
-
-The OpenCLI browser extension must be installed and connected. Run `opencli doctor` to check connectivity.
 
 ## Cost Estimate
 
@@ -95,14 +102,27 @@ Using `--save-as` adds one additional LLM call ($0.05–0.20) for skill generati
 
 ## Troubleshooting
 
+### "OPENCLI_API_KEY is not set"
+Configure your LLM provider:
+```bash
+export OPENCLI_PROVIDER=anthropic
+export OPENCLI_API_KEY=sk-ant-...
+```
+
+### "LLM returned HTML instead of JSON"
+Your `OPENCLI_BASE_URL` is pointing to the proxy's dashboard, not its API endpoint. Add `/v1`:
+```bash
+export OPENCLI_BASE_URL='https://your-proxy.com/v1'
+```
+
 ### "Extension not connected"
 Run `opencli doctor` to diagnose. Make sure the OpenCLI extension is installed and enabled in Chrome.
 
 ### "attach failed: Cannot access a chrome-extension:// URL"
-Another Chrome extension (usually 1Password or a debugger extension) is interfering. The agent will retry automatically, but if it persists, temporarily disable the conflicting extension.
+Another Chrome extension (usually 1Password or a debugger extension) is interfering. The agent retries automatically (up to 5 times for operate commands), but if it persists, temporarily disable the conflicting extension.
 
 ### "LLM returned empty response"
-Your API proxy may be truncating responses. Check your `ANTHROPIC_BASE_URL` configuration.
+Your API proxy may be truncating responses, or the model name may not be supported by your proxy. Check `OPENCLI_MODEL` and `OPENCLI_BASE_URL`.
 
 ### Agent fills wrong fields or misses content below the fold
 The agent scrolls elements into view before interacting, but complex pages with many dynamic elements can sometimes cause issues. Try running with `-v` to see what the agent sees and does.

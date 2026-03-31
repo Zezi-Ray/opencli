@@ -554,6 +554,18 @@ opencli record <url> --out .opencli/record/x   # 自定义输出目录
 #   .opencli/record/<site>/captured.json        ← 原始捕获数据（带 url/method/body）
 #   .opencli/record/<site>/candidates/*.yaml    ← 高置信度候选适配器（score ≥ 8，有 array 结果）
 
+# Operate: AI agent autonomously controls the browser to complete tasks
+# Supports Anthropic (Claude) and OpenAI (GPT) models
+# Requires: OPENCLI_PROVIDER, OPENCLI_API_KEY, optionally OPENCLI_MODEL, OPENCLI_BASE_URL
+opencli operate "go to HN and extract the top 5 stories"
+opencli operate --url https://github.com/trending "extract top 3 repos"
+opencli operate -v "fill the form with test data"           # verbose: see each step
+opencli operate --save-as hn/top "get top HN stories"       # save as reusable skill
+opencli operate --screenshot "describe this page layout"    # include screenshots for LLM
+opencli operate --max-steps 20 "quick task"                 # limit step count
+# After --save-as, the skill runs without AI:
+#   opencli hn top
+
 # Strategy Cascade: auto-probe PUBLIC → COOKIE → HEADER
 opencli cascade <api-url>
 

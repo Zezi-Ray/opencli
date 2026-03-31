@@ -85,10 +85,15 @@ opencli bilibili hot --limit 5         # Browser command (requires Extension)
 
 ### 4. AI Agent (New!)
 
-Let an AI agent operate your browser with natural language:
+Let an AI agent operate your browser with natural language. Supports Anthropic and OpenAI:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+# Configure (one-time)
+export OPENCLI_PROVIDER=anthropic       # or openai
+export OPENCLI_MODEL=sonnet             # model alias
+export OPENCLI_API_KEY=sk-ant-...       # your API key
+
+# Run
 opencli operate "go to Hacker News and extract the top 5 stories"
 opencli operate --url https://github.com/trending "extract top 3 trending repos"
 ```
@@ -100,7 +105,7 @@ opencli operate --save-as hn/top "get top 5 HN stories" --url https://news.ycomb
 opencli hn top   # Runs without AI from now on
 ```
 
-See [OPERATE.md](./OPERATE.md) for full documentation.
+See [OPERATE.md](./OPERATE.md) for full documentation, configuration, and troubleshooting.
 
 ### Update
 
