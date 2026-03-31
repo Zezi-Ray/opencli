@@ -107,36 +107,26 @@ export class LLMClient {
 
   constructor(config: LLMClientConfig = {}) {
     // Resolve model
-    const modelStr = config.model
-      ?? process.env.OPENCLI_MODEL
-      ?? (process.env.ANTHROPIC_API_KEY ? 'anthropic:sonnet' : 'anthropic:sonnet');
+    const modelStr = config.model ?? process.env.OPENCLI_MODEL ?? 'anthropic:sonnet';
     const resolved = resolveModel(modelStr);
     this.provider = resolved.provider;
     this.modelId = resolved.modelId;
 
     // Resolve API key
-    this.apiKey = config.apiKey
-      ?? process.env.OPENCLI_API_KEY
-      ?? process.env.ANTHROPIC_API_KEY  // legacy fallback
-      ?? process.env.OPENAI_API_KEY     // legacy fallback
-      ?? '';
-
+    this.apiKey = config.apiKey ?? process.env.OPENCLI_API_KEY ?? '';
     if (!this.apiKey) {
       throw new Error(
-        'No API key found. Set OPENCLI_API_KEY or OPENCLI_MODEL + provider-specific key.\n'
-        + 'Examples:\n'
-        + '  export OPENCLI_API_KEY=sk-ant-...    # Anthropic\n'
-        + '  export OPENCLI_API_KEY=sk-...        # OpenAI\n'
-        + '  export OPENCLI_MODEL=openai:gpt-5.4  # Specify provider + model',
+        'OPENCLI_API_KEY is not set.\n'
+        + 'Set it with:\n'
+        + '  export OPENCLI_API_KEY=sk-ant-...          # Anthropic key\n'
+        + '  export OPENCLI_API_KEY=sk-...              # OpenAI key\n'
+        + '  export OPENCLI_MODEL=openai:gpt-5.4        # Optional: specify provider + model\n'
+        + '  export OPENCLI_BASE_URL=https://proxy.com   # Optional: API proxy',
       );
     }
 
     // Resolve base URL
-    this.baseURL = config.baseURL
-      ?? process.env.OPENCLI_BASE_URL
-      ?? process.env.ANTHROPIC_BASE_URL  // legacy fallback
-      ?? process.env.OPENAI_BASE_URL     // legacy fallback
-      ?? undefined;
+    this.baseURL = config.baseURL ?? process.env.OPENCLI_BASE_URL ?? undefined;
   }
 
   /** The resolved provider name */

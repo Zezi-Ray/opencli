@@ -18,17 +18,12 @@ export interface RunAgentOptions extends AgentConfig {
 }
 
 export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
-  // Validate API key (check all possible env var sources)
-  const hasKey = process.env.OPENCLI_API_KEY
-    || process.env.ANTHROPIC_API_KEY
-    || process.env.OPENAI_API_KEY;
-  if (!hasKey) {
+  // Validate API key
+  if (!process.env.OPENCLI_API_KEY) {
     throw new ConfigError(
-      'No API key configured for opencli operate',
-      'Set one of:\n'
-      + '  export OPENCLI_API_KEY=sk-...           # Anthropic or OpenAI key\n'
-      + '  export OPENCLI_MODEL=openai:gpt-5.4     # Specify provider\n'
-      + '  export ANTHROPIC_API_KEY=sk-ant-...      # Legacy Anthropic key',
+      'OPENCLI_API_KEY is not set',
+      'export OPENCLI_API_KEY=sk-ant-...          # Anthropic or OpenAI key\n'
+      + 'export OPENCLI_MODEL=openai:gpt-5.4        # Optional: specify provider + model',
     );
   }
 
