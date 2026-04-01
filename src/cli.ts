@@ -11,11 +11,19 @@ import { type CliCommand, fullName, getRegistry, strategyLabel } from './registr
 import { serializeCommand, formatArgSummary } from './serialization.js';
 import { render as renderOutput } from './output.js';
 import { getBrowserFactory, browserSession } from './runtime.js';
+import type { IPage } from './types.js';
 import { PKG_VERSION } from './version.js';
 import { printCompletionScript } from './completion.js';
 import { loadExternalClis, executeExternalCli, installExternalCli, registerExternalCli, isBinaryInstalled } from './external.js';
 import { registerAllCommands } from './commanderAdapter.js';
 import { EXIT_CODES, getErrorMessage } from './errors.js';
+
+/** Create a browser page for browse commands. Uses 'browse' workspace for session persistence. */
+async function getBrowsePage(): Promise<IPage> {
+  const { BrowserBridge } = await import('./browser/index.js');
+  const bridge = new BrowserBridge();
+  return bridge.connect({ timeout: 30, workspace: 'browse' });
+}
 
 export function runCli(BUILTIN_CLIS: string, USER_CLIS: string): void {
   const program = new Command();
@@ -258,6 +266,153 @@ export function runCli(BUILTIN_CLIS: string, USER_CLIS: string): void {
       });
       console.log(renderAgentResult(result, modelDisplay));
       process.exitCode = result.success ? EXIT_CODES.SUCCESS : EXIT_CODES.GENERIC_ERROR;
+    });
+
+  // ── Built-in: browse (manual browser control for Claude Code) ──────────────
+
+  const browse = program
+    .command('browse')
+    .description('Manual browser control — navigate, click, type, extract (no LLM needed)');
+
+  browse
+    .command('open')
+    .argument('<url>')
+    .description('Open URL in automation window')
+    .action(async (url) => {
+      const page = await getBrowsePage();
+      await page.goto(url);
+      await page.wait(2);
+      const currentUrl = await page.getCurrentUrl?.() ?? url;
+      console.log(`Navigated to: ${currentUrl}`);
+    });
+
+  browse
+    .command('state')
+    .description('Get page state: URL, title, interactive elements with [N] indices')
+    .action(async () => {
+      const page = await getBrowsePage();
+      const snapshot = await page.snapshot({ viewportExpand: 800 });
+      const url = await page.getCurrentUrl?.() ?? '';
+      console.log(`URL: ${url}\n`);
+      console.log(typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot, null, 2));
+    });
+
+  browse
+    .command('click')
+    .argument('<index>', 'Element index from state')
+    .description('Click element by index')
+    .action(async (index) => {
+      const page = await getBrowsePage();
+      await page.click(index);
+      console.log(`Clicked element [${index}]`);
+    });
+
+  browse
+    .command('type')
+    .argument('<index>', 'Element index from state')
+    .argument('<text>', 'Text to type')
+    .description('Click element, then type text')
+    .action(async (index, text) => {
+      const page = await getBrowsePage();
+      await page.click(index);
+      await page.wait(0.2);
+      await page.typeText(index, text);
+      console.log(`Typed "${text}" into element [${index}]`);
+    });
+
+  browse
+    .command('select')
+    .argument('<index>', 'Element index of <select>')
+    .argument('<option>', 'Option text to select')
+    .description('Select dropdown option')
+    .action(async (index, option) => {
+      const page = await getBrowsePage();
+      const result = await page.evaluate(`
+        (function() {
+          var sel = document.querySelector('[data-opencli-ref="${index}"]');
+          if (!sel || sel.tagName !== 'SELECT') return { error: 'Not a <select>' };
+          var match = Array.from(sel.options).find(o => o.text.trim() === ${JSON.stringify(option)} || o.value === ${JSON.stringify(option)});
+          if (!match) return { error: 'Option not found', available: Array.from(sel.options).map(o => o.text.trim()) };
+          var setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+          if (setter) setter.call(sel, match.value); else sel.value = match.value;
+          sel.dispatchEvent(new Event('input', {bubbles:true}));
+          sel.dispatchEvent(new Event('change', {bubbles:true}));
+          return { selected: match.text };
+        })()
+      `);
+      const r = result as { error?: string; selected?: string; available?: string[] } | null;
+      if (r?.error) {
+        console.error(`Error: ${r.error}${r.available ? ` — Available: ${r.available.join(', ')}` : ''}`);
+        process.exitCode = EXIT_CODES.GENERIC_ERROR;
+      } else {
+        console.log(`Selected "${r?.selected}" in element [${index}]`);
+      }
+    });
+
+  browse
+    .command('keys')
+    .argument('<key>', 'Key to press (Enter, Escape, Tab, Control+a, etc.)')
+    .description('Press keyboard key')
+    .action(async (key) => {
+      const page = await getBrowsePage();
+      await page.pressKey(key);
+      console.log(`Pressed: ${key}`);
+    });
+
+  browse
+    .command('eval')
+    .argument('<js>', 'JavaScript code to evaluate')
+    .description('Execute JavaScript in page context, return result')
+    .action(async (js) => {
+      const page = await getBrowsePage();
+      const result = await page.evaluate(js);
+      if (typeof result === 'string') console.log(result);
+      else console.log(JSON.stringify(result, null, 2));
+    });
+
+  browse
+    .command('screenshot')
+    .argument('[path]', 'Save to file path (prints base64 if omitted)')
+    .description('Take screenshot')
+    .action(async (path) => {
+      const page = await getBrowsePage();
+      if (path) {
+        await page.screenshot({ path });
+        console.log(`Screenshot saved to: ${path}`);
+      } else {
+        const base64 = await page.screenshot({ format: 'png' });
+        console.log(base64);
+      }
+    });
+
+  browse
+    .command('scroll')
+    .argument('<direction>', 'up or down')
+    .option('--amount <pixels>', 'Pixels to scroll', '500')
+    .description('Scroll page')
+    .action(async (direction, opts) => {
+      const page = await getBrowsePage();
+      await page.scroll(direction, parseInt(opts.amount, 10));
+      console.log(`Scrolled ${direction}`);
+    });
+
+  browse
+    .command('back')
+    .description('Go back in browser history')
+    .action(async () => {
+      const page = await getBrowsePage();
+      await page.evaluate('history.back()');
+      await page.wait(2);
+      console.log('Navigated back');
+    });
+
+  browse
+    .command('close')
+    .description('Close the automation window')
+    .action(async () => {
+      const page = await getBrowsePage();
+      await page.closeWindow?.();
+      console.log('Automation window closed');
     });
 
   // ── Built-in: doctor / completion ──────────────────────────────────────────
