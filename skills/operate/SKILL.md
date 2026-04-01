@@ -30,11 +30,68 @@ opencli operate -v "fill the login form with test@example.com"
 
 Requires `OPENCLI_API_KEY` for LLM calls. See OPERATE.md for full config.
 
-### Mode 2: Manual Commands (coming soon)
+### Mode 2: Manual Commands (Claude Code controls the loop)
 
-> `opencli browse` commands for step-by-step browser control are planned. This will let Claude Code drive the browser directly without LLM API costs.
->
-> For now, use `opencli operate` (Mode 1) which handles the full loop automatically.
+Claude Code drives the browser step-by-step using CLI commands. **No LLM API key needed** — Claude Code IS the LLM.
+
+#### Core Workflow
+
+1. **Navigate**: open a URL
+2. **Inspect**: get page state with element indices
+3. **Interact**: use indices to click, type, select
+4. **Verify**: check state or take screenshot
+5. **Repeat**: browser stays open between commands
+
+#### Navigation
+
+```bash
+opencli browse open <url>                    # Open URL in automation window
+opencli browse back                          # Go back in history
+opencli browse scroll down                   # Scroll down
+opencli browse scroll up                     # Scroll up
+```
+
+#### Page State — always run this first to get element indices
+
+```bash
+opencli browse state                         # Returns: URL, title, interactive elements with [N] indices
+opencli browse screenshot [path.png]         # Take screenshot (base64 if no path)
+```
+
+#### Interactions — use indices from state
+
+```bash
+opencli browse click <index>                 # Click element [N]
+opencli browse type <index> "text"           # Click element [N], then type text
+opencli browse select <index> "option"       # Select dropdown option
+opencli browse keys "Enter"                  # Press keyboard key
+opencli browse eval "document.title"         # Execute JavaScript, return result
+```
+
+#### Data Extraction
+
+```bash
+opencli browse eval "document.querySelectorAll('.item').length"
+opencli browse eval "JSON.stringify([...document.querySelectorAll('h2')].map(e => e.textContent))"
+```
+
+#### Example: Extract HN Stories
+
+```bash
+opencli browse open https://news.ycombinator.com
+opencli browse state                         # See elements: [1] a "Story 1", [2] a "Story 2"...
+opencli browse eval "JSON.stringify([...document.querySelectorAll('.titleline a')].slice(0,5).map(a => ({title: a.textContent, url: a.href})))"
+```
+
+#### Example: Fill a Form
+
+```bash
+opencli browse open https://httpbin.org/forms/post
+opencli browse state                         # See: [3] input "Customer Name", [4] input "Telephone"...
+opencli browse type 3 "OpenCLI"
+opencli browse type 4 "555-0100"
+opencli browse click 7                       # Click submit (DON'T if user said "don't submit")
+```
 
 ## Saving as Reusable CLI
 

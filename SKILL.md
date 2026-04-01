@@ -27,8 +27,12 @@ AI agent or manual browser control. Navigate, click, type, extract — with exis
 ```bash
 # AI agent mode (requires OPENCLI_API_KEY)
 opencli operate "go to HN and extract top 5 stories"
-opencli operate --url https://github.com/trending "extract top 3 repos"
 opencli operate --save-as hn/top "get top HN stories"   # Save as reusable CLI
+
+# Manual mode (Claude Code controls the loop)
+opencli browse open https://example.com
+opencli browse state
+opencli browse click 3
 ```
 
 ### 3. Adapter Development (`skills/adapter-dev/SKILL.md`)
